@@ -1,7 +1,7 @@
+
+-r LocalWebserver/requirements.txt
+coverage
 errbot
 pytest
 pytest-env
 pytest-xdist
-coverage
-
--r LocalWebserver/requirements.txt

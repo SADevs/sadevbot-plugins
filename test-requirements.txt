@@ -1,5 +1,6 @@
 
 -r LocalWebserver/requirements.txt
+-r SlackExtendedBackend/requirements.txt
 coverage
 errbot
 pytest

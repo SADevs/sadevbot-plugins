@@ -1,0 +1,9 @@
+[Core]
+Name = SADevsWebsite
+Module = sadevs-website
+
+[Documentation]
+Description = This plugin lets sadevbot interact with the SA Devs Website
+
+[Python]
+Version = 3

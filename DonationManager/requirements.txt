@@ -1,0 +1,2 @@
+python-decouple
+wrapt>=1.12.1

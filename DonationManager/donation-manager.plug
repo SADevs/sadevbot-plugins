@@ -1,0 +1,10 @@
+[Core]
+Name = DonationManager
+Module = donation-manager
+DependsOn = SADevsWebsite
+
+[Documentation]
+Description = Manages donations for our SA Devs Season of Giving.
+
+[Python]
+Version = 3

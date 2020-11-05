@@ -161,7 +161,7 @@ class ChannelMonitor(BotPlugin):
             "user": user,
             "action": action,
             "timestamp": timestamp,
-            "string_repr": f"{timestamp}: {channel} was {action}'d by {user}",
+            "string_repr": f"{timestamp}: {user} {action}d {channel}.",
         }
 
     @staticmethod

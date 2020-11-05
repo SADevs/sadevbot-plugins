@@ -136,3 +136,6 @@ config.py
 errbot.log
 data/
 plugins/
+
+# vscode
+.vscode/

@@ -45,7 +45,7 @@ def test_build_log(testbot):
     assert log["user"] == USER
     assert log["action"] == "create"
     assert log["timestamp"] == 12345
-    assert log["string_repr"] == f"12345: {CHANNEL} was create'd by {USER}"
+    assert log["string_repr"] == f"12345: {USER} created {CHANNEL}."
 
 
 def test_log_channel_change(testbot):

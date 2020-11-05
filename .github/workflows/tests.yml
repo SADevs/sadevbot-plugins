@@ -37,6 +37,9 @@ jobs:
     - name: Install Dependencies
       run: |
         python3 -m pip install -r test-requirements.txt
+    - name: Install Plugin Dependencies
+      run: |
+        bash ci/install_plugin_deps.sh
     - name: Unit tests
       run: |
         coverage run -m pytest .

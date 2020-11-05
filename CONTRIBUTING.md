@@ -17,6 +17,8 @@ Fork the repo, do your work in your repo, then PR your changes back to the SADev
 # Unit tests/CI
 [Unit tests](https://errbot.readthedocs.io/en/latest/user_guide/plugin_development/testing.html) go in tests/. Install test-requirements.txt and then run tests with "pytest"
 
+# Commit Linting
+This repo uses convenctional commits. Check out https://www.conventionalcommits.org/en/v1.0.0/ for more info on how to use conventional commits.
 
 # I have an idea for a plugin
 AWESOME! Reach out to the admins (or just @drlordrevandrew) to discuss it. As long as there's no glaring issues (someone else working on something similar, conflict of interest, or a violation of our rules) we'll give you the greenlight you can get started!

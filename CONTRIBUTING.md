@@ -14,6 +14,11 @@ Create a new folder with the name of your plugin then follow https://errbot.read
 # Git Workflow
 Fork the repo, do your work in your repo, then PR your changes back to the SADevs repo.
 
+
+# Commit Messages
+Follow the guide [here](https://www.conventionalcommits.org/en/v1.0.0/#summary) and make your commit messages meaningful. Commit subject lines should be less than 72 characters long and the body less than 80 characters.
+
+
 # Unit tests/CI
 [Unit tests](https://errbot.readthedocs.io/en/latest/user_guide/plugin_development/testing.html) go in tests/. Install test-requirements.txt and then run tests with "pytest"
 

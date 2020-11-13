@@ -57,7 +57,7 @@ kick the bot into working again.
 
 ## Donation Total And List
 
-Our Donation Total: {{ total }}
+Our Donation Total: ${{ "%.2f" | format(total) }}
 
 ### Donations
 

@@ -1,13 +1,14 @@
 from threading import Thread
+from typing import Any
+from typing import Dict
 
-from webtest import TestApp
-from errbot.core_plugins import flask_app
-from werkzeug.serving import ThreadedWSGIServer
-
-from errbot import botcmd, BotPlugin, webhook
-
-from typing import Dict, Any
 from decouple import config as get_config
+from errbot import botcmd
+from errbot import BotPlugin
+from errbot import webhook
+from errbot.core_plugins import flask_app
+from webtest import TestApp
+from werkzeug.serving import ThreadedWSGIServer
 
 TEST_REPORT = """*** Test Report
 URL : %s

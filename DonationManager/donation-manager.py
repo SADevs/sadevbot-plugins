@@ -45,16 +45,22 @@ class DonationManager(BotPlugin):
             configuration = dict()
 
         get_config_item("DONATION_MANAGER_CHANNEL", configuration)
-        configuration["DM_CHANNEL_ID"] = self._bot.channelname_to_channelid(
-            configuration["DONATION_MANAGER_CHANNEL"]
-        )
+
         configuration["DM_CHANNEL_IDENTIFIER"] = self.build_identifier(
             configuration["DONATION_MANAGER_CHANNEL"]
         )
         get_config_item("DONATION_MANAGER_REPORT_CHANNEL", configuration)
-        configuration["DM_REPORT_CHANNEL_ID"] = self._bot.channelname_to_channelid(
-            configuration["DONATION_MANAGER_REPORT_CHANNEL"]
-        )
+        if self._bot.mode != "test":
+            configuration["DM_CHANNEL_ID"] = self._bot.channelname_to_channelid(
+                configuration["DONATION_MANAGER_CHANNEL"]
+            )
+
+            configuration["DM_REPORT_CHANNEL_ID"] = self._bot.channelname_to_channelid(
+                configuration["DONATION_MANAGER_REPORT_CHANNEL"]
+            )
+        else:
+            configuration["DM_CHANNEL_ID"] = "testing"
+            configuration["DM_REPORT_CHANNEL_ID"] = "testing"
         configuration["DM_REPORT_CHANNEL_IDENTIFIER"] = self.build_identifier(
             configuration["DONATION_MANAGER_REPORT_CHANNEL"]
         )

@@ -1,8 +1,9 @@
-errbot
-pytest
-pytest-env
-pytest-xdist
-coverage
 
 -r LocalWebserver/requirements.txt
 -r ChannelMonitor/requirements.txt
+coverage
+errbot
+pytest
+pytest-env
+pytest-mock
+pytest-xdist

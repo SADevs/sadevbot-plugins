@@ -1,6 +1,9 @@
+import json
+import time
 from collections import OrderedDict
 from datetime import datetime
 from datetime import timedelta
+from pathlib import Path
 from threading import RLock
 from time import mktime
 from typing import Any
@@ -16,6 +19,7 @@ from pytz import UTC
 from wrapt import synchronized
 
 CAL_LOCK = RLock()
+CAR_LOCK = RLock()
 
 
 def get_config_item(
@@ -54,6 +58,40 @@ class ChannelMonitor(BotPlugin):
         get_config_item(
             "CHANMON_LOG_JANITOR_INTERVAL", configuration, default=600, cast=int
         )
+
+        get_config_item(
+            "CHANNEL_ARCHIVE_WHITELIST",
+            configuration,
+            default="",
+            cast=lambda v: [s for s in v.split(",")],
+        )
+        get_config_item(
+            "CHANNEL_ARCHIVE_MESSAGE_TEMPLATE_PATH",
+            configuration,
+            default="/config/channel_archive_template.json",
+        )
+        configuration[
+            "CHANNEL_ARCHIVE_MESSAGE_TEMPLATES"
+        ] = self._get_message_templates(
+            configuration["CHANNEL_ARCHIVE_MESSAGE_TEMPLATE_PATH"]
+        )
+        get_config_item(
+            "CHANNEL_ARCHIVE_AT_LEAST_AGE", configuration, default="45", cast=int
+        )
+        configuration["CHANNEL_ARCHIVE_AT_LEAST_AGE_SECONDS"] = (
+            configuration["CHANNEL_ARCHIVE_AT_LEAST_AGE"] * 24 * 60 * 60
+        )
+
+        get_config_item(
+            "CHANNEL_ARCHIVE_LAST_MESSAGE", configuration, default="30", cast=int
+        )
+        configuration["CHANNEL_ARCHIVE_LAST_MESSAGE_SECONDS"] = (
+            configuration["CHANNEL_ARCHIVE_LAST_MESSAGE"] * 24 * 60 * 60
+        )
+
+        get_config_item(
+            "CHANNEL_ARCHIVE_JANITOR_INTERVAL", configuration, default=3600, cast=float
+        )
         super().configure(configuration)
 
     def activate(self):
@@ -67,10 +105,26 @@ class ChannelMonitor(BotPlugin):
                     datetime.now().strftime("%Y-%m-%d"): list()
                 }
 
+        try:
+            self["channel_archive_whitelist"]
+        except KeyError:
+            self["channel_archive_whitelist"] = self.config["CHANNEL_ARCHIVE_WHITELIST"]
+
         self.start_poller(
             self.config["CHANMON_LOG_JANITOR_INTERVAL"],
             self._log_janitor,
             args=(self.config["CHANMON_LOG_DAYS"]),
+        )
+        # Dry run poller
+        self.start_poller(
+            self.config["CHANNEL_ARCHIVE_JANITOR_INTERVAL"],
+            self._channel_janitor,
+            args=(True),
+        )
+        # archive poller
+        self.start_poller(
+            self.config["CHANNEL_ARCHIVE_JANITOR_INTERVAL"] + 3600,
+            self._channel_janitor,
         )
 
     def deactivate(self):
@@ -187,6 +241,155 @@ class ChannelMonitor(BotPlugin):
         """Sends a log to a slack channel"""
         self.send(self.config["CHANMON_CHANNEL_ID"], log["string_repr"])
 
+    def _send_archive_message(self, channel: Dict, dry_run: bool) -> None:
+        """Sends a templated message to channel, based on dry_run
+
+        Arguments:
+            channel {Dict} -- Channel object
+            dry_run {bool} -- whether or not this is a dry run
+        """
+        if dry_run:
+            message = self.config["CHANNEL_ARCHIVE_MESSAGE_TEMPLATES"]["dry_run"]
+        else:
+            message = self.config["CHANNEL_ARCHIVE_MESSAGE_TEMPLATES"]["archive"]
+
+        self.send(self.build_identifier(channel["id"]), message)
+
+    def _archive_channel(self, channel: Dict, dry_run: bool) -> None:
+        """Sends a message to each channel to be archived and archives it, based on dry_run
+
+        Arguments:
+            channel {Dict} -- Channel object
+            dry_run {bool} -- Whether this is a dry_run or not
+        """
+        self._send_archive_message(channel, dry_run)
+        if not dry_run:
+            response = self._bot.api_call(
+                "conversations.archive", data={"channel": channel["id"]}
+            )
+            if not response["ok"]:
+                self.warn_admins(
+                    f"Tried to archive channel {channel['name']} and hit an error: {response['error']}"
+                )
+
+    def _should_archive(self, channel: Dict) -> bool:
+        """Checks if a channel should be archived based on our config
+
+        Arguments:
+            channel {Dict} -- channel object
+
+        Returns:
+            bool -- if the channel should be archived
+        """
+        now = int(time.time())
+
+        # check data we have first, before hitting the slack API again
+
+        # if somehow we get an archived channel, this prevents the error
+        if channel["is_archived"]:
+            self.log.debug("channel is archived")
+            return False
+
+        # only care about slack channels, nothing else
+        if not channel["is_channel"]:
+            self.log.debug("channel isn't a channel")
+            return False
+
+        # check if this is the general channel and cannot be archived
+        if channel["is_general"]:
+            self.log.debug("channel is general")
+            return False
+
+        # check if name whitelisted
+        if channel["name"] in self["channel_archive_whitelist"]:
+            self.log.debug("channel name is in whitelist")
+            return False
+
+        # check if id whitelisted
+        if channel["id"] in self["channel_archive_whitelist"]:
+            self.log.debug("channel id is whitelisted")
+            return False
+
+        # check if the channel is old enough to be archived
+        if (
+            now - channel["created"]
+            < self.config["CHANNEL_ARCHIVE_AT_LEAST_AGE_SECONDS"]
+        ):
+            self.log.debug("channel isn't old enough to archive")
+            return False
+
+        # check min members
+        if (
+            self.config["CHANNEL_ARCHIVE_MEMBER_COUNT"] != 0
+            and channel["num_members"] > self.config["CHANNEL_ARCHIVE_MEMBER_COUNT"]
+        ):
+            self.log.debug("channel has too many members to archive")
+            return False
+
+        # get the ts of the last message in the channel
+        messages = self._bot.api_call(
+            "conversations.history", data={"inclusive": 0, "oldest": 0, "count": 50}
+        )
+        if "latest" in messages:
+            ts = messages["latest"]
+            self.log.debug(f"Got {ts} from latest")
+        else:
+            # if we don't have a latest from the api, try to get the last message in the messages
+            # If there are no messages, return an absurdly small timestamp (arbitrarily 100)
+            ts = (
+                messages["messages"][-1]["ts"] if len(messages["messages"]) > 0 else 100
+            )
+            self.log.debug(f"No latest, got TS from message {ts}")
+
+        # check if its been too long since a message in the channel
+        if now - ts > self.config["CHANNEL_ARCHIVE_LAST_MESSAGE_SECONDS"]:
+            self.log.debug("channel's last message isn't recent, archiving")
+            return True
+
+        self.log.debug("shouldarchive is falling through")
+        return False
+
+    def _get_all_channels(self) -> List[Dict]:
+        """
+        Gets a list of all slack channels from the slack api
+
+        Returns:
+            List[Dict] -- List of slack channel objects
+        """
+        channels = self._bot.api_call(
+            "conversations.list", data={"exclude_archived": 1}
+        )
+        return channels["channels"]
+
+    @staticmethod
+    def _get_message_templates(file_path: str) -> Dict:
+        """Reads templates from a file or returns defaults
+
+        Arguments:
+            file_path {str} -- path of the template file to read
+
+        Returns:
+            Dict -- message templates
+        """
+        if not Path(file_path).is_file():
+            return {
+                "dry_run": "Warning: This channel will be archived on the next archive run due to inactivity. "
+                + "To prevent this, post a mesage in this channel or whitelist it with `./whitelist #[channel_name]`",
+                "archive": "This channel is being archived due to inactivity. If you feel this is a mistake you can "
+                + "<https://get.slack.help/hc/en-us/articles/201563847-Archive-a-channel#unarchive-a-channel|unarchive"
+                + " this channel>.",
+            }
+        with open(file_path, mode="r") as fh:
+            data = json.load(fh)
+
+        if "archive" not in data:
+            raise Exception("Missing Archive template in template file")
+
+        if "dry_run" not in data:
+            data["dry_run"] = data["archive"]
+
+        return data
+
     # Poller methods
     @synchronized(CAL_LOCK)
     def _log_janitor(self, days_to_keep: int) -> None:
@@ -206,3 +409,10 @@ class ChannelMonitor(BotPlugin):
             if len(cal_log[key]) == 0 and key != today:
                 cal_log.pop(key)
         self["channel_action_log"] = cal_log
+
+    @synchronized(CAR_LOCK)
+    def _channel_janitor(self, dry_run: bool = False) -> None:
+        """Poller that cleans up channels that are old"""
+        for channel in self._get_all_channels():
+            if self._should_archive(channel):
+                self._archive_channel(channel, dry_run)
